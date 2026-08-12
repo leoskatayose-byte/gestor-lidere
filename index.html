@@ -1110,6 +1110,13 @@ async function deleteMyAccount(){if(!confirm('Excluir sua conta e encerrar seu a
 /* ===================== BOOT ===================== */
 initSB();
 gEl('gateLogo').innerHTML=LOGO_SVG;
+sb.auth.onAuthStateChange(async (event)=>{
+  if(event==='PASSWORD_RECOVERY'){
+    let np=prompt('Recuperação de senha — digite a NOVA senha (mín. 8 caracteres):');
+    if(np&&np.length>=8){const {error}=await sb.auth.updateUser({password:np});toast(error?'Erro ao atualizar senha':'Senha atualizada! Entrando...');if(!error)afterLogin();}
+    else if(np!==null)toast('Senha muito curta');
+  }
+});
 (async function boot(){
   try{const {data:{session}}=await sb.auth.getSession();
     if(!session){gateShow('login');return}
