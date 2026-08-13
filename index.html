@@ -362,6 +362,14 @@ body.locked .wrap{display:none}
 .gate-foot a{color:var(--gold-l);cursor:pointer}
 .user-slot{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
 .uchip{font-size:12px;font-weight:600;color:var(--cream);background:rgba(255,255,255,.05);border:1px solid var(--line2);border-radius:20px;padding:6px 12px}
+.empbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 16px}
+.emp-lab{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--txt-mut);margin-right:4px}
+.emp-pill{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--txt-dim);background:rgba(255,255,255,.04);border:1px solid var(--line2);border-radius:22px;padding:7px 14px;cursor:pointer;transition:.15s}
+.emp-pill i{width:9px;height:9px;border-radius:50%;background:var(--ec)}
+.emp-pill:hover{color:var(--cream);border-color:var(--ec)}
+.emp-pill.active{color:#12100a;background:var(--ec);border-color:var(--ec)}
+.chip-emp{display:inline-flex;align-items:center;gap:5px}
+.chip-emp i{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
 </style>
 
 <div class="wrap">
@@ -369,7 +377,7 @@ body.locked .wrap{display:none}
     <div class="logo-box"><div id="logoSlot"></div></div>
     <div class="top-txt">
       <h1>Gestor de Pendências</h1>
-      <p>Kanban, prioridades, calendário e rotinas recorrentes · Lidere BPO Financeiro</p>
+      <p>Kanban, prioridades, calendário e rotinas recorrentes · Grupo (Lidere · Pagcerto · Prospere)</p>
     </div>
     <div class="top-actions">
       <button class="btn btn-gold" onclick="openTaskModal()">＋ Nova atividade</button>
@@ -380,6 +388,7 @@ body.locked .wrap{display:none}
     </div>
   </header>
 
+  <div class="empbar" id="empbar"></div>
   <nav class="tabs" id="tabs"></nav>
   <main id="views"></main>
 </div>
@@ -391,6 +400,7 @@ body.locked .wrap{display:none}
     <div class="modal-body">
       <input type="hidden" id="t_id">
       <div class="field"><label>Título da atividade *</label><input id="t_titulo" placeholder="Ex.: Precificar CRM Marina & Dr. Ronaldo"></div>
+      <div class="field"><label>Empresa</label><select id="t_emp"></select></div>
       <div class="field"><label>Prioridade</label>
         <div class="pri-pick" id="t_pri">
           <div class="pri-opt" data-p="baixa" onclick="pickPri('baixa')">Baixa</div>
@@ -422,6 +432,7 @@ body.locked .wrap{display:none}
     <div class="modal-body">
       <input type="hidden" id="m_id"><input type="hidden" id="m_tipo">
       <div class="field"><label>Descrição *</label><input id="m_desc" placeholder="Ex.: Enviar planilha da Giovana"></div>
+      <div class="field"><label>Empresa</label><select id="m_emp"></select></div>
       <div class="field" id="m_diaWrap"><label>Dia do mês (1–31)</label><input type="number" min="1" max="31" id="m_dia" placeholder="Ex.: 5"></div>
       <div class="field" id="m_ajWrap"><label>Quando cair em fim de semana ou feriado</label>
         <div class="aj-pick" id="m_aj">
@@ -642,9 +653,9 @@ function pErr(error,ctx){if(error){console.error(ctx||'',error);toast('⚠ Erro 
 async function up(table,row){const {error}=await sb.from(table).upsert(row);pErr(error,table)}
 async function delRow(table,id){const {error}=await sb.from(table).delete().eq('id',id);pErr(error,table)}
 function persistResp(r){up('responsaveis',{id:r.id,nome:r.nome,cor:r.cor,deleted_at:toISO(r.deletedAt)})}
-function persistAvulsa(a){up('avulsas',{id:a.id,titulo:a.titulo,prioridade:a.prioridade,prazo:a.prazo||null,responsavel_id:a.responsavelId||null,status:a.status,valor:a.valor||0,obs:a.obs||null,concluido_em:toISO(a.concluidoEm),deleted_at:toISO(a.deletedAt)})}
+function persistAvulsa(a){up('avulsas',{id:a.id,titulo:a.titulo,prioridade:a.prioridade,prazo:a.prazo||null,responsavel_id:a.responsavelId||null,status:a.status,valor:a.valor||0,obs:a.obs||null,empresa:a.empresa||'Lidere',concluido_em:toISO(a.concluidoEm),deleted_at:toISO(a.deletedAt)})}
 function persistModelo(tipo,m){const t={mensais:'mensais_modelos',semanais:'semanais_modelos',diarias:'diarias_modelos'}[tipo];
-  const row={id:m.id,descricao:m.descricao,responsavel_id:m.responsavelId||null,obs:m.obs||null,deleted_at:toISO(m.deletedAt)};
+  const row={id:m.id,descricao:m.descricao,responsavel_id:m.responsavelId||null,obs:m.obs||null,empresa:m.empresa||'Lidere',deleted_at:toISO(m.deletedAt)};
   if(tipo==='mensais'){row.dia=m.dia;row.ajuste=m.ajuste;row.valor=m.valor||0}
   if(tipo==='semanais')row.dia_semana=m.diaSemana;
   if(tipo==='diarias')row.ordem=m.ordem||0;
@@ -660,15 +671,26 @@ async function loadAll(){
   (E.data||[]).forEach(e=>{(exec[e.tipo][e.periodo]=exec[e.tipo][e.periodo]||{})[e.modelo_id]={feito:e.feito,em:fromISO(e.feito_em)}});
   DB={
     responsaveis:(R.data||[]).map(r=>({id:r.id,nome:r.nome,cor:r.cor,deletedAt:fromISO(r.deleted_at)})),
-    avulsas:(A.data||[]).map(a=>({id:a.id,titulo:a.titulo,prioridade:a.prioridade,prazo:a.prazo,responsavelId:a.responsavel_id,status:a.status,valor:Number(a.valor)||0,obs:a.obs,concluidoEm:fromISO(a.concluido_em),deletedAt:fromISO(a.deleted_at)})),
-    mensais:{modelos:(M.data||[]).map(m=>({id:m.id,dia:m.dia,ajuste:m.ajuste,descricao:m.descricao,valor:Number(m.valor)||0,responsavelId:m.responsavel_id,obs:m.obs,deletedAt:fromISO(m.deleted_at)})),exec:exec.mensais},
-    semanais:{modelos:(S.data||[]).map(m=>({id:m.id,diaSemana:m.dia_semana,descricao:m.descricao,responsavelId:m.responsavel_id,obs:m.obs,deletedAt:fromISO(m.deleted_at)})),exec:exec.semanais},
-    diarias:{modelos:(D.data||[]).map(m=>({id:m.id,descricao:m.descricao,responsavelId:m.responsavel_id,obs:m.obs,ordem:m.ordem||0,deletedAt:fromISO(m.deleted_at)})),exec:exec.diarias},
+    avulsas:(A.data||[]).map(a=>({id:a.id,titulo:a.titulo,prioridade:a.prioridade,prazo:a.prazo,responsavelId:a.responsavel_id,status:a.status,valor:Number(a.valor)||0,obs:a.obs,empresa:a.empresa||'Lidere',concluidoEm:fromISO(a.concluido_em),deletedAt:fromISO(a.deleted_at)})),
+    mensais:{modelos:(M.data||[]).map(m=>({id:m.id,dia:m.dia,ajuste:m.ajuste,descricao:m.descricao,valor:Number(m.valor)||0,responsavelId:m.responsavel_id,obs:m.obs,empresa:m.empresa||'Lidere',deletedAt:fromISO(m.deleted_at)})),exec:exec.mensais},
+    semanais:{modelos:(S.data||[]).map(m=>({id:m.id,diaSemana:m.dia_semana,descricao:m.descricao,responsavelId:m.responsavel_id,obs:m.obs,empresa:m.empresa||'Lidere',deletedAt:fromISO(m.deleted_at)})),exec:exec.semanais},
+    diarias:{modelos:(D.data||[]).map(m=>({id:m.id,descricao:m.descricao,responsavelId:m.responsavel_id,obs:m.obs,ordem:m.ordem||0,empresa:m.empresa||'Lidere',deletedAt:fromISO(m.deleted_at)})),exec:exec.diarias},
     feriados:(F.data||[]).map(f=>({id:f.id,data:f.data,nome:f.nome})),
   };
   clearHCache();
 }
 const alive=arr=>arr.filter(x=>!x.deletedAt);
+/* ---------- multiempresa ---------- */
+const EMPRESAS=['Lidere','Pagcerto','Prospere','Pessoal'];
+let filterEmpresa='';
+function empColor(k){return ({Lidere:'#d4a840',Pagcerto:'#3b82f6',Prospere:'#3ea06b',Pessoal:'#a855f7'}[k])||'#8a8f98'}
+function emp(arr){return filterEmpresa?arr.filter(x=>(x.empresa||'Lidere')===filterEmpresa):arr}
+function empChip(x){const k=x.empresa||'Lidere';return filterEmpresa?'':`<span class="chip chip-emp"><i style="background:${empColor(k)}"></i>${esc(k)}</span>`}
+function fillEmp(sel,val){const v=val||'Lidere';sel.innerHTML=EMPRESAS.map(k=>`<option value="${k}" ${v===k?'selected':''}>${k}</option>`).join('')}
+function renderEmpbar(){const el=document.getElementById('empbar');if(!el)return;
+  const pills=[['','Todas','#8a8f98']].concat(EMPRESAS.map(k=>[k,k,empColor(k)]));
+  el.innerHTML='<span class="emp-lab">Empresa</span>'+pills.map(([v,lab,c])=>`<button class="emp-pill ${filterEmpresa===v?'active':''}" style="--ec:${c}" onclick="setEmpresa('${v}')"><i></i>${lab}</button>`).join('');}
+function setEmpresa(v){filterEmpresa=v;render()}
 function resp(id){return DB.responsaveis.find(r=>r.id===id)}
 function respName(id){const r=resp(id);return r?r.nome:'—'}
 function initials(n){return(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
@@ -688,10 +710,10 @@ const TABS=[
   {id:'calendario',label:'Calendário',icon:'▦'},
 ];
 function tabCount(id){
-  if(id==='kanban')return alive(DB.avulsas).filter(a=>a.status!=='feito').length;
-  if(id==='mensais'){const ex=DB.mensais.exec[monthKey()]||{};return alive(DB.mensais.modelos).filter(m=>!(ex[m.id]&&ex[m.id].feito)).length}
-  if(id==='semanais'){const ex=DB.semanais.exec[weekKey()]||{};return alive(DB.semanais.modelos).filter(m=>!(ex[m.id]&&ex[m.id].feito)).length}
-  if(id==='diarias'){if(!isDiaUtil(new Date()))return 0;const ex=DB.diarias.exec[todayKey()]||{};return alive(DB.diarias.modelos).filter(m=>!(ex[m.id]&&ex[m.id].feito)).length}
+  if(id==='kanban')return emp(alive(DB.avulsas)).filter(a=>a.status!=='feito').length;
+  if(id==='mensais'){const ex=DB.mensais.exec[monthKey()]||{};return emp(alive(DB.mensais.modelos)).filter(m=>!(ex[m.id]&&ex[m.id].feito)).length}
+  if(id==='semanais'){const ex=DB.semanais.exec[weekKey()]||{};return emp(alive(DB.semanais.modelos)).filter(m=>!(ex[m.id]&&ex[m.id].feito)).length}
+  if(id==='diarias'){if(!isDiaUtil(new Date()))return 0;const ex=DB.diarias.exec[todayKey()]||{};return emp(alive(DB.diarias.modelos)).filter(m=>!(ex[m.id]&&ex[m.id].feito)).length}
   if(id==='responsaveis')return alive(DB.responsaveis).length;
   if(id==='excluidos')return trashItems().length;
   return undefined;
@@ -699,7 +721,7 @@ function tabCount(id){
 function renderTabs(){let tabs=TABS.slice();if(ME&&ME.is_admin)tabs=tabs.concat([{id:'admin',label:'Administração',icon:'👑'}]);
   document.getElementById('tabs').innerHTML=tabs.map(t=>{const c=tabCount(t.id);return`<button class="tab ${activeTab===t.id?'active':''}" onclick="go('${t.id}')"><span>${t.icon}</span> ${t.label}${c!==undefined?`<span class="cnt">${c}</span>`:''}</button>`}).join('')}
 function go(id){activeTab=id;render()}
-function render(){renderTabs();const v=document.getElementById('views');
+function render(){renderTabs();renderEmpbar();const v=document.getElementById('views');
   v.innerHTML=({kanban:viewKanban,mensais:viewMensais,semanais:viewSemanais,diarias:viewDiarias,responsaveis:viewResp,excluidos:viewExcluidos,calendario:viewCalendar,admin:viewAdmin}[activeTab])();
   if(activeTab==='calendario'&&calSel)calDay(calSel);
   if(activeTab==='semanais'&&semSel!=null)semDay(semSel);
@@ -733,7 +755,7 @@ function confettiBurst(){const c=document.createElement('div');c.className='conf
 /* ================= KANBAN ================= */
 let searchTerm='',filterResp='';
 function viewKanban(){
-  const list=alive(DB.avulsas);const nf=list.filter(a=>a.status!=='feito');const today=todayKey();
+  const list=emp(alive(DB.avulsas));const nf=list.filter(a=>a.status!=='feito');const today=todayKey();
   const stats=[['Total',list.length,'v-total'],['A Fazer',list.filter(a=>a.status==='afazer').length,'v-afazer'],['Fazendo',list.filter(a=>a.status==='fazendo').length,'v-fazendo'],['Feito',list.filter(a=>a.status==='feito').length,'v-feito'],['Alta prior.',nf.filter(a=>a.prioridade==='alta').length,'v-alta'],['Para hoje',nf.filter(a=>a.prazo===today).length,'v-hoje'],['Atrasadas',nf.filter(a=>a.prazo&&a.prazo<today).length,'v-atr']];
   const opts=alive(DB.responsaveis).map(r=>`<option value="${r.id}" ${filterResp===r.id?'selected':''}>${r.nome}</option>`).join('');
   const cols=[['afazer','A Fazer','var(--afazer)'],['fazendo','Fazendo','var(--fazendo)'],['feito','Feito','var(--feito)']];
@@ -759,7 +781,7 @@ function cardHTML(a){
   const val=a.valor?`<span class="chip chip-val">${brl(a.valor)}</span>`:'';
   const obs=a.obs?`<div class="card-obs">${esc(a.obs)}</div>`:'';
   const mv=[];if(a.status!=='afazer')mv.push(`<button class="mini" onclick="moveTask('${a.id}','afazer')">A Fazer</button>`);if(a.status!=='fazendo')mv.push(`<button class="mini" onclick="moveTask('${a.id}','fazendo')">Fazendo</button>`);if(a.status!=='feito')mv.push(`<button class="mini" onclick="moveTask('${a.id}','feito')">Feito</button>`);
-  return`<article class="card p-${a.prioridade} ${a.status==='feito'?'done':''} ${overdue?'overdue':''}" data-id="${a.id}" draggable="true" ondragstart="dragCard(event,'${a.id}')"><div class="card-title">${esc(a.titulo)}</div><div class="chips"><span class="chip chip-${a.prioridade}">${pl}</span><span class="chip ${dc}">${a.prazo?fmtBR(a.prazo):'sem prazo'}</span>${a.responsavelId?`<span class="chip chip-resp">${avatarHTML(a.responsavelId)} ${respName(a.responsavelId)}</span>`:''}${val}</div>${obs}<div class="card-foot">${mv.join('')}<button class="mini edit" onclick="openTaskModal('${a.id}')">✎</button><button class="mini del" onclick="delTask('${a.id}')">🗑</button></div></article>`;
+  return`<article class="card p-${a.prioridade} ${a.status==='feito'?'done':''} ${overdue?'overdue':''}" data-id="${a.id}" draggable="true" ondragstart="dragCard(event,'${a.id}')"><div class="card-title">${esc(a.titulo)}</div><div class="chips">${empChip(a)}<span class="chip chip-${a.prioridade}">${pl}</span><span class="chip ${dc}">${a.prazo?fmtBR(a.prazo):'sem prazo'}</span>${a.responsavelId?`<span class="chip chip-resp">${avatarHTML(a.responsavelId)} ${respName(a.responsavelId)}</span>`:''}${val}</div>${obs}<div class="card-foot">${mv.join('')}<button class="mini edit" onclick="openTaskModal('${a.id}')">✎</button><button class="mini del" onclick="delTask('${a.id}')">🗑</button></div></article>`;
 }
 let dragId=null;
 function dragCard(e,id){dragId=id;e.dataTransfer.effectAllowed='move'}
@@ -777,17 +799,18 @@ function openTaskModal(id,status){const a=id?DB.avulsas.find(x=>x.id===id):null;
   document.getElementById('t_prazo').value=a?(a.prazo||''):todayKey();document.getElementById('t_valor').value=a&&a.valor?a.valor:'';
   document.getElementById('t_obs').value=a?(a.obs||''):'';document.getElementById('t_status').value=a?a.status:(status||'afazer');
   fillResp(document.getElementById('t_resp'),a?a.responsavelId:'');pickPri(a?a.prioridade:'media');
+  fillEmp(document.getElementById('t_emp'),a?a.empresa:(filterEmpresa||'Lidere'));
   showModal('taskOverlay');setTimeout(()=>document.getElementById('t_titulo').focus(),50)}
 function saveTask(){const titulo=document.getElementById('t_titulo').value.trim();if(!titulo)return toast('Informe o título');
   const id=document.getElementById('t_id').value;
-  const d={titulo,prioridade:curPri,prazo:document.getElementById('t_prazo').value||null,responsavelId:document.getElementById('t_resp').value||null,status:document.getElementById('t_status').value,valor:parseFloat(document.getElementById('t_valor').value)||0,obs:document.getElementById('t_obs').value.trim()};
+  const d={titulo,prioridade:curPri,prazo:document.getElementById('t_prazo').value||null,responsavelId:document.getElementById('t_resp').value||null,status:document.getElementById('t_status').value,valor:parseFloat(document.getElementById('t_valor').value)||0,obs:document.getElementById('t_obs').value.trim(),empresa:document.getElementById('t_emp').value||'Lidere'};
   let obj;if(id){obj=Object.assign(DB.avulsas.find(a=>a.id===id),d)}else{obj={id:uid(),criadoEm:Date.now(),...d};DB.avulsas.push(obj)}
   persistAvulsa(obj);closeModal('taskOverlay');render();toast('Atividade salva')}
 
 /* ================= MENSAIS ================= */
 function viewMensais(){
   const y=mensalRef.getFullYear(),m=mensalRef.getMonth();const mk=monthKey(mensalRef);const ex=DB.mensais.exec[mk]||{};
-  const mods=alive(DB.mensais.modelos);
+  const mods=emp(alive(DB.mensais.modelos));
   const total=mods.length,done=mods.filter(mo=>ex[mo.id]&&ex[mo.id].feito).length;const pct=total?Math.round(done/total*100):0;
   const withEff=mods.map(mo=>({mo,eff:mensalEff(y,m,mo)})).sort((a,b)=>a.eff-b.eff||a.mo.dia-b.mo.dia);
   const groups={};withEff.forEach(o=>{const k=iso(o.eff);(groups[k]=groups[k]||[]).push(o)});
@@ -815,10 +838,10 @@ const WDAYS=[['1','Segunda'],['2','Terça'],['3','Quarta'],['4','Quinta'],['5','
 function mondayOf(d){d=new Date(d);const g=(d.getDay()+6)%7;d.setDate(d.getDate()-g);d.setHours(0,0,0,0);return d}
 function viewSemanais(){
   const wk=weekKey(semRef);const ex=DB.semanais.exec[wk]||{};const monday=mondayOf(semRef);const todayK=todayKey();
-  const total=alive(DB.semanais.modelos).length,done=alive(DB.semanais.modelos).filter(m=>ex[m.id]&&ex[m.id].feito).length;const pct=total?Math.round(done/total*100):0;
+  const total=emp(alive(DB.semanais.modelos)).length,done=emp(alive(DB.semanais.modelos)).filter(m=>ex[m.id]&&ex[m.id].feito).length;const pct=total?Math.round(done/total*100):0;
   const cells=WDAYS.slice(0,6).map(([d,name])=>{
     const cd=new Date(monday);cd.setDate(monday.getDate()+((+d===0?7:+d)-1));
-    const mods=alive(DB.semanais.modelos).filter(m=>String(m.diaSemana)===d);
+    const mods=emp(alive(DB.semanais.modelos)).filter(m=>String(m.diaSemana)===d);
     const doneN=mods.filter(m=>ex[m.id]&&ex[m.id].feito).length;
     return`<div class="wcell ${todayKey(cd)===todayK?'today':''} ${semSel===d?'sel':''}" onclick="semSel='${d}';render()"><h4>${name}<span class="muted">${pad(cd.getDate())}/${pad(cd.getMonth()+1)}</span></h4><div class="wc-count">${mods.length}</div><div class="wc-lab">${mods.length?doneN+' feita(s)':'sem rotina'}</div></div>`;
   }).join('');
@@ -832,9 +855,9 @@ function viewSemanais(){
 function stepWeek(n){semRef=new Date(semRef.getFullYear(),semRef.getMonth(),semRef.getDate()+n*7);render()}
 function semDay(d){
   const wk=weekKey(semRef);const ex=DB.semanais.exec[wk]||{};const name=WDAYS.find(w=>w[0]===d)[1];
-  const mods=alive(DB.semanais.modelos).filter(m=>String(m.diaSemana)===d);
+  const mods=emp(alive(DB.semanais.modelos)).filter(m=>String(m.diaSemana)===d);
   const items=mods.map(m=>{const on=ex[m.id]&&ex[m.id].feito;
-    return`<div class="row ${on?'done':''}" data-mid="${m.id}"><button class="check ${on?'on':''}" onclick="toggleExec('semanais','${m.id}')">${svgCheck}</button><div class="row-body"><div class="row-title">${esc(m.descricao)}</div><div class="row-meta">${m.responsavelId?`<span class="chip chip-resp">${avatarHTML(m.responsavelId)} ${respName(m.responsavelId)}</span>`:''}</div>${m.obs?`<div class="muted" style="margin-top:4px">${esc(m.obs)}</div>`:''}</div><div class="row-actions"><button class="iconbtn" onclick="openModelo('semanais','${m.id}')">${iEdit}</button><button class="iconbtn del" onclick="delModelo('semanais','${m.id}')">${iTrash}</button></div></div>`;
+    return`<div class="row ${on?'done':''}" data-mid="${m.id}"><button class="check ${on?'on':''}" onclick="toggleExec('semanais','${m.id}')">${svgCheck}</button><div class="row-body"><div class="row-title">${esc(m.descricao)}</div><div class="row-meta">${empChip(m)}${m.responsavelId?`<span class="chip chip-resp">${avatarHTML(m.responsavelId)} ${respName(m.responsavelId)}</span>`:''}</div>${m.obs?`<div class="muted" style="margin-top:4px">${esc(m.obs)}</div>`:''}</div><div class="row-actions"><button class="iconbtn" onclick="openModelo('semanais','${m.id}')">${iEdit}</button><button class="iconbtn del" onclick="delModelo('semanais','${m.id}')">${iTrash}</button></div></div>`;
   }).join('')||`<div class="empty">Sem rotina para ${name}.</div>`;
   const el=document.getElementById('semSide');if(el)el.innerHTML=`<h3>${name}</h3><div class="side-sub">Rotinas desta semana</div>${items}<button class="btn btn-sm btn-gold" style="margin-top:8px" onclick="openModelo('semanais',null,'${d}')">＋ Nova em ${name}</button>`;
 }
@@ -843,7 +866,7 @@ function semDay(d){
 function viewDiarias(){
   if(!diariaDate)diariaDate=todayKey();
   const dk=diariaDate;const dt=parseK(dk);const util=isDiaUtil(dt);const ex=DB.diarias.exec[dk]||{};
-  const mods=alive(DB.diarias.modelos).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+  const mods=emp(alive(DB.diarias.modelos)).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
   const total=mods.length,done=mods.filter(m=>ex[m.id]&&ex[m.id].feito).length;const pct=total?Math.round(done/total*100):0;
   const isToday=dk===todayKey();
   const dName=dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
@@ -853,7 +876,7 @@ function viewDiarias(){
     return`<div class="row ${on?'done':''}" draggable="true" data-id="${m.id}" data-mid="${m.id}" ondragstart="dDragStart(event,'${m.id}')" ondragend="dDragEnd(event)" ondragover="dDragOver(event,'${m.id}')" ondrop="dDrop(event,'${m.id}')">
       <span class="grip" title="Arraste para reordenar">⋮⋮</span>
       <button class="check ${on?'on':''}" onclick="toggleExec('diarias','${m.id}')">${svgCheck}</button>
-      <div class="row-body"><div class="row-title">${esc(m.descricao)}</div><div class="row-meta">${m.responsavelId?`<span class="chip chip-resp">${avatarHTML(m.responsavelId)} ${respName(m.responsavelId)}</span>`:''}</div>${m.obs?`<div class="muted" style="margin-top:4px">${esc(m.obs)}</div>`:''}</div>
+      <div class="row-body"><div class="row-title">${esc(m.descricao)}</div><div class="row-meta">${empChip(m)}${m.responsavelId?`<span class="chip chip-resp">${avatarHTML(m.responsavelId)} ${respName(m.responsavelId)}</span>`:''}</div>${m.obs?`<div class="muted" style="margin-top:4px">${esc(m.obs)}</div>`:''}</div>
       <div class="row-actions"><button class="iconbtn" onclick="openModelo('diarias','${m.id}')">${iEdit}</button><button class="iconbtn del" onclick="delModelo('diarias','${m.id}')">${iTrash}</button></div></div>`;
   }).join('')||`<div class="empty">Nenhuma rotina diária. Clique em “＋ Nova”.</div>`}
   return`<div class="panel"><div class="panel-head"><h2>Rotina Diária</h2>
@@ -879,7 +902,7 @@ function mrow(tipo,m,on,badge,valor,overdue){
   const val=valor?`<span class="chip chip-val">${brl(valor)}</span>`:'';const bd=badge?`<span class="chip chip-date ${overdue?'over':''}">${badge}</span>`:'';
   const rp=m.responsavelId?`<span class="chip chip-resp">${avatarHTML(m.responsavelId)} ${respName(m.responsavelId)}</span>`:'';
   const obs=m.obs?`<div class="muted" style="margin-top:4px">${esc(m.obs)}</div>`:'';
-  return`<div class="row ${on?'done':''} ${overdue?'overdue':''}" data-mid="${m.id}"><button class="check ${on?'on':''}" onclick="toggleExec('${tipo}','${m.id}')">${svgCheck}</button><div class="row-body"><div class="row-title">${esc(m.descricao)}</div><div class="row-meta">${bd}${rp}${val}</div>${obs}</div><div class="row-actions"><button class="iconbtn" onclick="openModelo('${tipo}','${m.id}')">${iEdit}</button><button class="iconbtn del" onclick="delModelo('${tipo}','${m.id}')">${iTrash}</button></div></div>`;
+  return`<div class="row ${on?'done':''} ${overdue?'overdue':''}" data-mid="${m.id}"><button class="check ${on?'on':''}" onclick="toggleExec('${tipo}','${m.id}')">${svgCheck}</button><div class="row-body"><div class="row-title">${esc(m.descricao)}</div><div class="row-meta">${empChip(m)}${bd}${rp}${val}</div>${obs}</div><div class="row-actions"><button class="iconbtn" onclick="openModelo('${tipo}','${m.id}')">${iEdit}</button><button class="iconbtn del" onclick="delModelo('${tipo}','${m.id}')">${iTrash}</button></div></div>`;
 }
 function periodKey(tipo){return tipo==='mensais'?monthKey(mensalRef):tipo==='semanais'?weekKey(semRef):diariaDate}
 function toggleExec(tipo,mid){const pk=periodKey(tipo);const s=DB[tipo].exec;s[pk]=s[pk]||{};const cur=s[pk][mid]&&s[pk][mid].feito;s[pk][mid]={feito:!cur,em:!cur?Date.now():null};if(!cur)window._justPop=mid;persistExec(tipo,mid,pk,!cur);render()}
@@ -893,6 +916,7 @@ function openModelo(tipo,id,presetSem){const m=id?DB[tipo].modelos.find(x=>x.id=
   document.getElementById('m_sem').value=m&&m.diaSemana!==undefined?m.diaSemana:(presetSem||'5');
   pickAj(m?(m.ajuste||'posterga'):'posterga');
   fillResp(document.getElementById('m_resp'),m?m.responsavelId:'');
+  fillEmp(document.getElementById('m_emp'),m?m.empresa:(filterEmpresa||'Lidere'));
   document.getElementById('m_diaWrap').classList.toggle('hide',tipo!=='mensais');
   document.getElementById('m_ajWrap').classList.toggle('hide',tipo!=='mensais');
   document.getElementById('m_valWrap').classList.toggle('hide',tipo!=='mensais');
@@ -900,7 +924,7 @@ function openModelo(tipo,id,presetSem){const m=id?DB[tipo].modelos.find(x=>x.id=
   showModal('modeloOverlay');setTimeout(()=>document.getElementById('m_desc').focus(),50)}
 function saveModelo(){const tipo=document.getElementById('m_tipo').value;const id=document.getElementById('m_id').value;
   const desc=document.getElementById('m_desc').value.trim();if(!desc)return toast('Informe a descrição');
-  const b={descricao:desc,obs:document.getElementById('m_obs').value.trim(),responsavelId:document.getElementById('m_resp').value||null};
+  const b={descricao:desc,obs:document.getElementById('m_obs').value.trim(),responsavelId:document.getElementById('m_resp').value||null,empresa:document.getElementById('m_emp').value||'Lidere'};
   if(tipo==='mensais'){b.dia=Math.min(31,Math.max(1,parseInt(document.getElementById('m_dia').value)||1));b.ajuste=curAj;b.valor=parseFloat(document.getElementById('m_valor').value)||0}
   if(tipo==='semanais')b.diaSemana=parseInt(document.getElementById('m_sem').value);
   let obj;if(id){obj=Object.assign(DB[tipo].modelos.find(m=>m.id===id),b)}else{if(tipo==='diarias')b.ordem=alive(DB.diarias.modelos).length;obj={id:uid(),...b};DB[tipo].modelos.push(obj)}
@@ -911,12 +935,12 @@ function delModelo(tipo,id){const m=DB[tipo].modelos.find(x=>x.id===id);if(!m)re
 function mensaisOnDate(dt){
   const out=[],seen={},y=dt.getFullYear(),m=dt.getMonth();
   [-1,0,1].forEach(off=>{const r=new Date(y,m+off,1),yy=r.getFullYear(),mm=r.getMonth();
-    alive(DB.mensais.modelos).forEach(mo=>{if(seen[mo.id])return;if(iso(mensalEff(yy,mm,mo))===iso(dt)){out.push(mo);seen[mo.id]=1}})});
+    emp(alive(DB.mensais.modelos)).forEach(mo=>{if(seen[mo.id])return;if(iso(mensalEff(yy,mm,mo))===iso(dt)){out.push(mo);seen[mo.id]=1}})});
   return out;
 }
-function semanaisOnDate(dt){return alive(DB.semanais.modelos).filter(m=>String(m.diaSemana)===String(dt.getDay()))}
-function avulsasOnDate(dt){return alive(DB.avulsas).filter(a=>a.prazo===iso(dt))}
-function diariasOnDate(dt){return isDiaUtil(dt)?alive(DB.diarias.modelos):[]}
+function semanaisOnDate(dt){return emp(alive(DB.semanais.modelos)).filter(m=>String(m.diaSemana)===String(dt.getDay()))}
+function avulsasOnDate(dt){return emp(alive(DB.avulsas)).filter(a=>a.prazo===iso(dt))}
+function diariasOnDate(dt){return isDiaUtil(dt)?emp(alive(DB.diarias.modelos)):[]}
 function holidayName(dt){const y=dt.getFullYear(),k=iso(dt);const n=feriadosNacionais(y).find(f=>f.data===k);if(n)return n.nome;const l=(DB.feriados||[]).find(f=>f.data===k);return l?l.nome:null}
 function dayOverdue(dt){if(iso(dt)>=todayKey())return false;
   if(avulsasOnDate(dt).some(a=>a.status!=='feito'))return true;
@@ -935,7 +959,7 @@ function viewCalendar(){
     cells+=`<div class="cal-cell ${dk===todayK?'today':''} ${!isDiaUtil(dt)?'nu':''} ${hol?'hol':''} ${over?'hasover':''} ${calSel===dk?'sel':''}" onclick="calSel='${dk}';render()"><span class="cn">${d}</span>${badge}<div class="cdots">${dots}</div>${holHtml}</div>`;
   }
   const mn=calRef.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
-  const pills=`<div class="cal-sum"><span class="pill">📌 Avulsas no mês <b>${mAv}</b></span><span class="pill">🔁 Rotinas mensais <b>${alive(DB.mensais.modelos).length}</b></span><span class="pill" style="border-color:rgba(239,68,68,.3)">⚠ Dias com atraso <b style="color:#ff9d9d">${mOverDays}</b></span></div>`;
+  const pills=`<div class="cal-sum"><span class="pill">📌 Avulsas no mês <b>${mAv}</b></span><span class="pill">🔁 Rotinas mensais <b>${emp(alive(DB.mensais.modelos)).length}</b></span><span class="pill" style="border-color:rgba(239,68,68,.3)">⚠ Dias com atraso <b style="color:#ff9d9d">${mOverDays}</b></span></div>`;
   return`<div class="panel"><div class="cal-head"><button class="btn btn-sm" onclick="stepCal(-1)">‹</button><h2>${mn}</h2><button class="btn btn-sm" onclick="stepCal(1)">›</button><button class="btn btn-sm" onclick="calRef=new Date();render()">Hoje</button>
   <span class="legend"><span><i style="background:var(--c-av)"></i>Avulsas</span><span><i style="background:var(--c-men)"></i>Mensais</span><span><i style="background:var(--c-sem)"></i>Semanais</span><span><i style="background:var(--c-dia)"></i>Diárias</span></span></div>
   ${pills}
@@ -964,11 +988,11 @@ function calDay(dk){const dt=parseK(dk);const el=document.getElementById('calSid
 
 /* ================= RESPONSÁVEIS ================= */
 function respCounts(id){
-  const av=alive(DB.avulsas).filter(a=>a.responsavelId===id);
+  const av=emp(alive(DB.avulsas)).filter(a=>a.responsavelId===id);
   const pend=av.filter(a=>a.status!=='feito'),done=av.filter(a=>a.status==='feito');
   const over=pend.filter(a=>a.prazo&&a.prazo<todayKey());
-  const men=alive(DB.mensais.modelos).filter(m=>m.responsavelId===id);
-  const sem=alive(DB.semanais.modelos).filter(m=>m.responsavelId===id);
+  const men=emp(alive(DB.mensais.modelos)).filter(m=>m.responsavelId===id);
+  const sem=emp(alive(DB.semanais.modelos)).filter(m=>m.responsavelId===id);
   const dia=alive(DB.diarias.modelos).filter(m=>m.responsavelId===id);
   return{av,pend,done,over,men,sem,dia,rot:men.length+sem.length+dia.length,total:av.length+men.length+sem.length+dia.length};
 }
